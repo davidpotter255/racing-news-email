@@ -25,30 +25,68 @@ class RacingNewsScraper:
         self.market_movers = []
         self.entries = []
         
-    def get_article_summary(self, url):
-        """Fetch article and extract a brief summary"""
+    def get_article_content(self, url):
+        """Fetch full article content and create a summary"""
         try:
             response = requests.get(url, headers=self.headers, timeout=10)
             soup = BeautifulSoup(response.content, 'html.parser')
             
+            # Remove script and style elements
+            for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
+                script.decompose()
+            
             # Try to find article content
             content = None
+            paragraphs = []
             
-            # Common article content selectors
-            for selector in ['article', 'div[class*="article"]', 'div[class*="content"]', 'div[class*="body"]']:
+            # Common article content selectors - try in order
+            selectors = [
+                'article',
+                'div[class*="article-content"]',
+                'div[class*="article-body"]',
+                'div[class*="entry-content"]',
+                'div[class*="post-content"]',
+                'div[class*="content"]',
+                'main'
+            ]
+            
+            for selector in selectors:
                 content_div = soup.select_one(selector)
                 if content_div:
                     # Get all paragraphs
-                    paragraphs = content_div.find_all('p', limit=3)
-                    if paragraphs:
-                        text = ' '.join([p.get_text(strip=True) for p in paragraphs[:2]])
-                        # Clean up and limit length
-                        text = ' '.join(text.split())  # Remove extra whitespace
-                        if len(text) > 200:
-                            text = text[:200] + '...'
-                        return text
+                    paragraphs = content_div.find_all('p')
+                    if len(paragraphs) >= 2:
+                        break
+            
+            if not paragraphs:
+                # Fallback - get all p tags
+                paragraphs = soup.find_all('p')
+            
+            # Extract text from first 5 paragraphs
+            text_parts = []
+            for p in paragraphs[:5]:
+                text = p.get_text(strip=True)
+                if len(text) > 30:  # Only substantial paragraphs
+                    text_parts.append(text)
+                if len(text_parts) >= 3:  # Get up to 3 good paragraphs
+                    break
+            
+            if text_parts:
+                # Join and create summary (first 400 chars from article)
+                full_text = ' '.join(text_parts)
+                # Clean up whitespace
+                full_text = ' '.join(full_text.split())
+                
+                # Create a summary - take first 300-400 characters
+                if len(full_text) > 400:
+                    summary = full_text[:400].rsplit('.', 1)[0] + '.'
+                else:
+                    summary = full_text
+                
+                return summary
             
             return None
+            
         except Exception as e:
             return None
     
@@ -68,11 +106,18 @@ class RacingNewsScraper:
                     if headline and link:
                         article_url = 'https://www.sportinglife.com' + link.get('href') if link.get('href').startswith('/') else link.get('href')
                         
-                        # Try to get summary from article preview or fetch it
+                        # Try to get summary from article preview first
                         summary = None
                         preview = article.find('p')
                         if preview:
-                            summary = preview.get_text(strip=True)[:200]
+                            summary = preview.get_text(strip=True)
+                        
+                        # If no preview, fetch the full article
+                        if not summary or len(summary) < 100:
+                            time.sleep(0.5)  # Be polite to the server
+                            fetched_summary = self.get_article_content(article_url)
+                            if fetched_summary:
+                                summary = fetched_summary
                         
                         self.news_items.append({
                             'source': 'Sporting Life',
@@ -105,11 +150,18 @@ class RacingNewsScraper:
                         href = link.get('href', '')
                         full_url = href if href.startswith('http') else f"https://www.attheraces.com{href}"
                         
-                        # Try to get summary
+                        # Try to get summary from preview
                         summary = None
                         preview = article.find('p')
                         if preview:
-                            summary = preview.get_text(strip=True)[:200]
+                            summary = preview.get_text(strip=True)
+                        
+                        # If no preview, fetch the article
+                        if not summary or len(summary) < 100:
+                            time.sleep(0.5)
+                            fetched_summary = self.get_article_content(full_url)
+                            if fetched_summary:
+                                summary = fetched_summary
                         
                         self.news_items.append({
                             'source': 'At The Races',
@@ -144,11 +196,18 @@ class RacingNewsScraper:
                         if '/news/' in href or '/horses/' in href:
                             full_url = href if href.startswith('http') else f"https://www.racingpost.com{href}"
                             
-                            # Try to get summary
+                            # Try to get summary from preview
                             summary = None
                             preview = article.find('p')
                             if preview:
-                                summary = preview.get_text(strip=True)[:200]
+                                summary = preview.get_text(strip=True)
+                            
+                            # If no preview, fetch the article  
+                            if not summary or len(summary) < 100:
+                                time.sleep(0.5)
+                                fetched_summary = self.get_article_content(full_url)
+                                if fetched_summary:
+                                    summary = fetched_summary
                             
                             self.news_items.append({
                                 'source': 'Racing Post',
@@ -180,11 +239,18 @@ class RacingNewsScraper:
                         href = link.get('href', '')
                         full_url = href if href.startswith('http') else f"https://www.timeform.com{href}"
                         
-                        # Try to get summary
+                        # Try to get summary from preview
                         summary = None
                         preview = article.find('p')
                         if preview:
-                            summary = preview.get_text(strip=True)[:200]
+                            summary = preview.get_text(strip=True)
+                        
+                        # If no preview, fetch the article
+                        if not summary or len(summary) < 100:
+                            time.sleep(0.5)
+                            fetched_summary = self.get_article_content(full_url)
+                            if fetched_summary:
+                                summary = fetched_summary
                         
                         self.news_items.append({
                             'source': 'Timeform',
