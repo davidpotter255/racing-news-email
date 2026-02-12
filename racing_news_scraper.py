@@ -25,6 +25,33 @@ class RacingNewsScraper:
         self.market_movers = []
         self.entries = []
         
+    def get_article_summary(self, url):
+        """Fetch article and extract a brief summary"""
+        try:
+            response = requests.get(url, headers=self.headers, timeout=10)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Try to find article content
+            content = None
+            
+            # Common article content selectors
+            for selector in ['article', 'div[class*="article"]', 'div[class*="content"]', 'div[class*="body"]']:
+                content_div = soup.select_one(selector)
+                if content_div:
+                    # Get all paragraphs
+                    paragraphs = content_div.find_all('p', limit=3)
+                    if paragraphs:
+                        text = ' '.join([p.get_text(strip=True) for p in paragraphs[:2]])
+                        # Clean up and limit length
+                        text = ' '.join(text.split())  # Remove extra whitespace
+                        if len(text) > 200:
+                            text = text[:200] + '...'
+                        return text
+            
+            return None
+        except Exception as e:
+            return None
+    
     def get_sporting_life_news(self):
         """Scrape Sporting Life racing news"""
         try:
@@ -39,10 +66,19 @@ class RacingNewsScraper:
                     link = article.find('a')
                     
                     if headline and link:
+                        article_url = 'https://www.sportinglife.com' + link.get('href') if link.get('href').startswith('/') else link.get('href')
+                        
+                        # Try to get summary from article preview or fetch it
+                        summary = None
+                        preview = article.find('p')
+                        if preview:
+                            summary = preview.get_text(strip=True)[:200]
+                        
                         self.news_items.append({
                             'source': 'Sporting Life',
                             'headline': headline.get_text(strip=True),
-                            'url': 'https://www.sportinglife.com' + link.get('href') if link.get('href').startswith('/') else link.get('href')
+                            'url': article_url,
+                            'summary': summary
                         })
                 except Exception as e:
                     continue
@@ -69,10 +105,17 @@ class RacingNewsScraper:
                         href = link.get('href', '')
                         full_url = href if href.startswith('http') else f"https://www.attheraces.com{href}"
                         
+                        # Try to get summary
+                        summary = None
+                        preview = article.find('p')
+                        if preview:
+                            summary = preview.get_text(strip=True)[:200]
+                        
                         self.news_items.append({
                             'source': 'At The Races',
                             'headline': headline.get_text(strip=True),
-                            'url': full_url
+                            'url': full_url,
+                            'summary': summary
                         })
                 except Exception as e:
                     continue
@@ -101,10 +144,17 @@ class RacingNewsScraper:
                         if '/news/' in href or '/horses/' in href:
                             full_url = href if href.startswith('http') else f"https://www.racingpost.com{href}"
                             
+                            # Try to get summary
+                            summary = None
+                            preview = article.find('p')
+                            if preview:
+                                summary = preview.get_text(strip=True)[:200]
+                            
                             self.news_items.append({
                                 'source': 'Racing Post',
                                 'headline': headline.get_text(strip=True),
-                                'url': full_url
+                                'url': full_url,
+                                'summary': summary
                             })
                 except Exception as e:
                     continue
@@ -130,10 +180,17 @@ class RacingNewsScraper:
                         href = link.get('href', '')
                         full_url = href if href.startswith('http') else f"https://www.timeform.com{href}"
                         
+                        # Try to get summary
+                        summary = None
+                        preview = article.find('p')
+                        if preview:
+                            summary = preview.get_text(strip=True)[:200]
+                        
                         self.news_items.append({
                             'source': 'Timeform',
                             'headline': headline.get_text(strip=True),
-                            'url': full_url
+                            'url': full_url,
+                            'summary': summary
                         })
                 except Exception as e:
                     continue
@@ -277,9 +334,14 @@ class RacingNewsScraper:
                     unique_news.append(item)
             
             for item in unique_news[:15]:
+                summary_html = ""
+                if item.get('summary'):
+                    summary_html = f"<p style='color: #555; font-size: 14px; margin: 5px 0;'><strong>TLDR:</strong> {item['summary']}</p>"
+                
                 html += f"""
                 <div class="news-item">
                     <h3><a href="{item['url']}" target="_blank">{item['headline']}</a></h3>
+                    {summary_html}
                     <span class="source">{item['source']}</span>
                 </div>
                 """
